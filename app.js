@@ -18,6 +18,9 @@
   const settingsBtn = $("settingsBtn");
   const closeSettings = $("closeSettings");
   const voiceSelect = $("voiceSelect");
+  const refreshVoices = $("refreshVoices");
+  const spanglish = $("spanglish");
+  const enVoiceName = $("enVoiceName");
   const rate = $("rate");
   const pitch = $("pitch");
   const volume = $("volume");
@@ -67,14 +70,75 @@
   };
 
   const settings = Object.assign(
-    { voiceURI: "", rate: 1, pitch: 1, volume: 1, speakOnPhrase: true },
+    { voiceURI: "", rate: 1, pitch: 1, volume: 1, speakOnPhrase: true, spanglish: true },
     load(KEYS.settings, {})
   );
   let phrases = load(KEYS.phrases, DEFAULT_PHRASES);
   let history = load(KEYS.history, []);
 
+  // --- Detección de inglés (para Spanglish) ---
+  // Palabras inglesas frecuentes en español que NO tienen letras/combinaciones
+  // "delatoras" (se detectan por lista); las demás se detectan por heurística.
+  const ENGLISH_WORDS = new Set([
+    "email", "manager", "random", "outfit", "post", "posts", "story", "stories",
+    "reel", "reels", "influencer", "podcast", "spoiler", "trailer", "briefing",
+    "hater", "haters", "gamer", "selfie", "selfies", "casting", "meeting",
+    "streaming", "shopping", "running", "gaming", "boarding", "deadline",
+    "feedback", "brunch", "hobby", "fitness", "workout", "fit", "cool", "look",
+    "looks", "crush", "match", "player", "team", "call", "chill", "trend",
+    "trending", "boomer", "millennial", "hype", "flow", "vibe", "vibes",
+    "playlist", "hashtag", "link", "links", "click", "clicks", "software",
+    "hardware", "backup", "login", "logout", "update", "smartphone", "laptop",
+    "tablet", "gadget", "startup", "freelance", "remote", "office", "coworking",
+    "networking", "coach", "coaching", "sorry", "please", "ok", "okay", "yes",
+    "nice", "wow", "top", "best", "friend", "friends", "happy", "birthday",
+    "weekend", "party", "after", "delivery", "rider", "packaging", "trekking",
+    "casual", "vintage", "outlet", "sale", "black", "friday",
+  ]);
+
+  // Excepciones: llevan k/w pero son palabras usadas en español -> NO inglés.
+  const SPANISH_KW = new Set([
+    "kilo", "kilos", "kilómetro", "kilómetros", "kiwi", "kiosco", "koala",
+    "karate", "kart", "web", "wifi", "whatsapp", "waterpolo", "wc", "kit",
+  ]);
+
+  function isEnglishToken(raw) {
+    const w = raw.toLowerCase().replace(/[^a-záéíóúñü]/gi, "");
+    if (w.length < 2) return false;
+    if (/[áéíóúñ]/.test(w)) return false;                 // acento/ñ => español
+    if (SPANISH_KW.has(w)) return false;
+    if (ENGLISH_WORDS.has(w) || ENGLISH_WORDS.has(w.replace(/s$/, ""))) return true;
+    if (/(sh|th|ght|wh|ck|oo|ee|ea|ph| mp3)/.test(w)) return true; // clusters ingleses
+    if (/[kw]/.test(w)) return true;                       // k/w no exceptuadas
+    return false;
+  }
+
+  // Divide el texto en tramos consecutivos por idioma, conservando espacios.
+  function segmentByLang(text) {
+    const tokens = text.match(/\s+|[^\s]+/g) || [];
+    const segs = [];
+    let cur = null;
+    for (const t of tokens) {
+      if (/^\s+$/.test(t)) {
+        if (cur) cur.text += t;
+        else cur = { text: t, lang: "es" };
+        continue;
+      }
+      const lang = isEnglishToken(t) ? "en" : "es";
+      if (cur && cur.lang === lang) cur.text += t;
+      else {
+        if (cur) segs.push(cur);
+        cur = { text: t, lang };
+      }
+    }
+    if (cur) segs.push(cur);
+    return segs;
+  }
+
   // --- Voces ---
   let voices = [];
+  let esVoice = null; // voz elegida en español
+  let enVoice = null; // mejor voz en inglés (para el Spanglish)
 
   // Nombres masculinos habituales de voces en español (iOS/Android/Windows).
   const MALE_ES_NAMES = [
@@ -88,19 +152,29 @@
   function isCompact(v) {
     return /compact/i.test(v.voiceURI);
   }
-  function isMale(v) {
-    return MALE_ES_NAMES.some((n) => v.name.toLowerCase().includes(n));
+  const MALE_EN_NAMES = ["daniel", "aaron", "arthur", "fred", "rishi", "oliver", "george", "reed", "tom", "alex"];
+  function isMaleName(v, names) {
+    return names.some((n) => v.name.toLowerCase().includes(n));
   }
 
-  // Puntúa cada voz: castellano + hombre + natural = mejor; compacta = peor.
-  function voiceScore(v) {
+  // Puntúa voces en español: castellano + hombre + natural = mejor.
+  function esScore(v) {
     const lang = (v.lang || "").toLowerCase();
     let s = 0;
     if (lang.startsWith("es-es")) s += 100;      // castellano de España
     else if (lang.startsWith("es")) s += 40;     // otro español
     if (isNatural(v)) s += 30;                    // voz natural/mejorada
     if (isCompact(v)) s -= 25;                    // voz compacta = robótica
-    if (isMale(v)) s += 20;                        // voz de hombre
+    if (isMaleName(v, MALE_ES_NAMES)) s += 20;    // voz de hombre
+    return s;
+  }
+  // Puntúa voces en inglés (para el Spanglish): hombre + natural mejor.
+  function enScore(v) {
+    let s = 0;
+    if (isNatural(v)) s += 30;
+    if (isCompact(v)) s -= 25;
+    if (isMaleName(v, MALE_EN_NAMES)) s += 20;
+    if (/en-us|en-gb/i.test(v.lang)) s += 10;
     return s;
   }
 
@@ -111,33 +185,49 @@
     return `${v.name} (${v.lang})${tag}`;
   }
 
+  function bestBy(list, scoreFn) {
+    if (!list.length) return null;
+    return list
+      .map((v) => ({ v, score: scoreFn(v) }))
+      .sort((a, b) => b.score - a.score)[0].v;
+  }
+
   function populateVoices() {
     voices = synth.getVoices();
-    // Ordena de mejor a peor según la puntuación (castellano/hombre/natural).
-    const ordered = voices
-      .map((v) => ({ v, score: voiceScore(v) }))
+
+    // El desplegable solo muestra voces en español (lista corta).
+    const esVoices = voices
+      .filter((v) => /^es/i.test(v.lang))
+      .map((v) => ({ v, score: esScore(v) }))
       .sort((a, b) => b.score - a.score)
       .map((x) => x.v);
 
     voiceSelect.innerHTML = "";
-    ordered.forEach((v) => {
+    esVoices.forEach((v) => {
       const opt = document.createElement("option");
       opt.value = v.voiceURI;
       opt.textContent = voiceLabel(v);
       voiceSelect.appendChild(opt);
     });
-
-    // Selección: la guardada por el usuario, o la mejor puntuada.
-    if (settings.voiceURI && ordered.some((v) => v.voiceURI === settings.voiceURI)) {
-      voiceSelect.value = settings.voiceURI;
-    } else if (ordered.length) {
-      voiceSelect.value = ordered[0].voiceURI;
-      settings.voiceURI = ordered[0].voiceURI;
+    if (!esVoices.length) {
+      const opt = document.createElement("option");
+      opt.textContent = "No hay voces en español disponibles";
+      opt.disabled = true;
+      voiceSelect.appendChild(opt);
     }
-  }
 
-  function getSelectedVoice() {
-    return voices.find((v) => v.voiceURI === settings.voiceURI) || null;
+    // Voz española: la guardada por el usuario, o la mejor puntuada.
+    if (settings.voiceURI && esVoices.some((v) => v.voiceURI === settings.voiceURI)) {
+      voiceSelect.value = settings.voiceURI;
+    } else if (esVoices.length) {
+      voiceSelect.value = esVoices[0].voiceURI;
+      settings.voiceURI = esVoices[0].voiceURI;
+    }
+    esVoice = voices.find((v) => v.voiceURI === settings.voiceURI) || esVoices[0] || null;
+
+    // Mejor voz en inglés (oculta), para pronunciar el Spanglish.
+    enVoice = bestBy(voices.filter((v) => /^en/i.test(v.lang)), enScore);
+    enVoiceName.textContent = enVoice ? `(${enVoice.name})` : "(no hay voz inglesa)";
   }
 
   // --- Hablar ---
@@ -151,30 +241,38 @@
 
     synth.cancel(); // corta lo anterior para respuesta rápida
 
-    const u = new SpeechSynthesisUtterance(text);
-    const voice = getSelectedVoice();
-    if (voice) {
-      u.voice = voice;
-      u.lang = voice.lang;
-    } else {
-      u.lang = "es-ES";
-    }
-    u.rate = settings.rate;
-    u.pitch = settings.pitch;
-    u.volume = settings.volume;
+    // Con Spanglish activado y voz inglesa disponible, separamos por idioma;
+    // si no, un único tramo en español.
+    const useSpanglish = settings.spanglish && enVoice;
+    const segments = useSpanglish
+      ? segmentByLang(text)
+      : [{ text, lang: "es" }];
 
-    u.onstart = () => {
-      stopBtn.disabled = false;
-      if (chip) chip.classList.add("speaking");
-    };
-    const done = () => {
+    stopBtn.disabled = false;
+    if (chip) chip.classList.add("speaking");
+    const finish = () => {
       stopBtn.disabled = true;
       if (chip) chip.classList.remove("speaking");
     };
-    u.onend = done;
-    u.onerror = done;
 
-    synth.speak(u);
+    segments.forEach((seg, i) => {
+      const u = new SpeechSynthesisUtterance(seg.text);
+      const voice = seg.lang === "en" ? enVoice : esVoice;
+      if (voice) {
+        u.voice = voice;
+        u.lang = voice.lang;
+      } else {
+        u.lang = seg.lang === "en" ? "en-US" : "es-ES";
+      }
+      u.rate = settings.rate;
+      u.pitch = settings.pitch;
+      u.volume = settings.volume;
+      if (i === segments.length - 1) {
+        u.onend = finish;
+        u.onerror = finish;
+      }
+      synth.speak(u);
+    });
   }
 
   function stop() {
@@ -296,8 +394,23 @@
     save(KEYS.settings, settings);
   });
 
+  spanglish.checked = settings.spanglish;
+  spanglish.addEventListener("change", () => {
+    settings.spanglish = spanglish.checked;
+    save(KEYS.settings, settings);
+  });
+
+  refreshVoices.addEventListener("click", () => {
+    populateVoices();
+    // Un habla muy corta a veces obliga a iOS a exponer voces recién bajadas.
+    const ping = new SpeechSynthesisUtterance(" ");
+    ping.volume = 0;
+    ping.onend = populateVoices;
+    synth.speak(ping);
+  });
+
   testVoice.addEventListener("click", () =>
-    speak("Hola, esta es una prueba de voz para el reposo vocal.")
+    speak("Hola, esta es una prueba de voz. This is an English test.")
   );
 
   // --- Panel de frases ---
@@ -327,6 +440,8 @@
   if (synth.onvoiceschanged !== undefined) {
     synth.onvoiceschanged = populateVoices;
   }
+  // iOS puebla la lista de voces con retraso: reintentamos unas veces.
+  [300, 1200, 2500].forEach((ms) => setTimeout(populateVoices, ms));
   renderPhrases();
   renderHistory();
 

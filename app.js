@@ -76,27 +76,60 @@
   // --- Voces ---
   let voices = [];
 
+  // Nombres masculinos habituales de voces en español (iOS/Android/Windows).
+  const MALE_ES_NAMES = [
+    "jorge", "diego", "carlos", "enrique", "pablo", "juan", "marco",
+    "miguel", "javier", "pedro", "raul", "raúl", "gonzalo", "andres", "andrés",
+  ];
+
+  function isNatural(v) {
+    return /enhanced|premium|siri|neural|natural/i.test(v.voiceURI + " " + v.name);
+  }
+  function isCompact(v) {
+    return /compact/i.test(v.voiceURI);
+  }
+  function isMale(v) {
+    return MALE_ES_NAMES.some((n) => v.name.toLowerCase().includes(n));
+  }
+
+  // Puntúa cada voz: castellano + hombre + natural = mejor; compacta = peor.
+  function voiceScore(v) {
+    const lang = (v.lang || "").toLowerCase();
+    let s = 0;
+    if (lang.startsWith("es-es")) s += 100;      // castellano de España
+    else if (lang.startsWith("es")) s += 40;     // otro español
+    if (isNatural(v)) s += 30;                    // voz natural/mejorada
+    if (isCompact(v)) s -= 25;                    // voz compacta = robótica
+    if (isMale(v)) s += 20;                        // voz de hombre
+    return s;
+  }
+
+  function voiceLabel(v) {
+    let tag = "";
+    if (isNatural(v)) tag = " · ★ natural";
+    else if (isCompact(v)) tag = " · básica";
+    return `${v.name} (${v.lang})${tag}`;
+  }
+
   function populateVoices() {
     voices = synth.getVoices();
-    // Priorizar español; luego el resto.
-    const es = voices.filter((v) => /^es/i.test(v.lang));
-    const rest = voices.filter((v) => !/^es/i.test(v.lang));
-    const ordered = [...es, ...rest];
+    // Ordena de mejor a peor según la puntuación (castellano/hombre/natural).
+    const ordered = voices
+      .map((v) => ({ v, score: voiceScore(v) }))
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.v);
 
     voiceSelect.innerHTML = "";
     ordered.forEach((v) => {
       const opt = document.createElement("option");
       opt.value = v.voiceURI;
-      opt.textContent = `${v.name} (${v.lang})${v.default ? " — por defecto" : ""}`;
+      opt.textContent = voiceLabel(v);
       voiceSelect.appendChild(opt);
     });
 
-    // Selección: guardada > primera española > primera disponible.
+    // Selección: la guardada por el usuario, o la mejor puntuada.
     if (settings.voiceURI && ordered.some((v) => v.voiceURI === settings.voiceURI)) {
       voiceSelect.value = settings.voiceURI;
-    } else if (es.length) {
-      voiceSelect.value = es[0].voiceURI;
-      settings.voiceURI = es[0].voiceURI;
     } else if (ordered.length) {
       voiceSelect.value = ordered[0].voiceURI;
       settings.voiceURI = ordered[0].voiceURI;

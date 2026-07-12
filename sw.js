@@ -1,4 +1,4 @@
-const CACHE = "speaktext-v2";
+const CACHE = "speaktext-v3";
 const ASSETS = [
   "./",
   "./index.html",

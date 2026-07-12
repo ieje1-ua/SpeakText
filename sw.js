@@ -1,4 +1,4 @@
-const CACHE = "speaktext-v1";
+const CACHE = "speaktext-v2";
 const ASSETS = [
   "./",
   "./index.html",
@@ -22,9 +22,16 @@ self.addEventListener("activate", (event) => {
   self.clients.claim();
 });
 
+// Red primero (siempre lo último si hay conexión); si falla, cae a la caché.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
   event.respondWith(
-    caches.match(event.request).then((cached) => cached || fetch(event.request))
+    fetch(event.request)
+      .then((res) => {
+        const copy = res.clone();
+        caches.open(CACHE).then((c) => c.put(event.request, copy));
+        return res;
+      })
+      .catch(() => caches.match(event.request))
   );
 });

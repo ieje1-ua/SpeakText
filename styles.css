@@ -145,6 +145,7 @@ kbd {
 }
 
 /* Panels */
+.panel[hidden] { display: none; }
 .panel {
   position: fixed;
   inset: 0;

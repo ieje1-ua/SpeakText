@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f172a" />
+  <title>SpeakText — Reposo vocal</title>
+  <meta name="description" content="Text to speech rápido y natural para cuando haces reposo vocal." />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="apple-touch-icon" href="icon.svg" />
+  <link rel="icon" href="icon.svg" type="image/svg+xml" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <main class="app">
+    <header class="top">
+      <h1>SpeakText</h1>
+      <button id="settingsBtn" class="icon-btn" aria-label="Ajustes" title="Ajustes">⚙️</button>
+    </header>
+
+    <section class="composer">
+      <textarea
+        id="text"
+        placeholder="Escribe aquí lo que quieres decir…"
+        autofocus
+        autocapitalize="sentences"
+        spellcheck="true"
+        rows="4"></textarea>
+
+      <div class="composer-actions">
+        <button id="speakBtn" class="primary">▶︎ Hablar</button>
+        <button id="stopBtn" class="ghost" disabled>■ Parar</button>
+        <button id="clearBtn" class="ghost">✕ Borrar</button>
+      </div>
+      <p class="hint">Consejo: pulsa <kbd>Ctrl</kbd>/<kbd>⌘</kbd> + <kbd>Enter</kbd> para hablar.</p>
+    </section>
+
+    <section class="quick">
+      <div class="quick-head">
+        <h2>Frases rápidas</h2>
+        <button id="editPhrasesBtn" class="link-btn">Editar</button>
+      </div>
+      <div id="quickPhrases" class="chips"></div>
+    </section>
+
+    <section class="history" id="historySection" hidden>
+      <div class="quick-head">
+        <h2>Recientes</h2>
+        <button id="clearHistoryBtn" class="link-btn">Limpiar</button>
+      </div>
+      <div id="history" class="chips"></div>
+    </section>
+  </main>
+
+  <!-- Panel de ajustes -->
+  <div id="settingsPanel" class="panel" hidden>
+    <div class="panel-inner">
+      <div class="panel-head">
+        <h2>Ajustes</h2>
+        <button id="closeSettings" class="icon-btn" aria-label="Cerrar">✕</button>
+      </div>
+
+      <label class="field">
+        <span>Voz</span>
+        <select id="voiceSelect"></select>
+      </label>
+
+      <label class="field">
+        <span>Velocidad <b id="rateVal">1.0</b></span>
+        <input id="rate" type="range" min="0.5" max="1.6" step="0.05" value="1" />
+      </label>
+
+      <label class="field">
+        <span>Tono <b id="pitchVal">1.0</b></span>
+        <input id="pitch" type="range" min="0" max="2" step="0.1" value="1" />
+      </label>
+
+      <label class="field">
+        <span>Volumen <b id="volumeVal">1.0</b></span>
+        <input id="volume" type="range" min="0" max="1" step="0.05" value="1" />
+      </label>
+
+      <label class="field checkbox">
+        <input id="speakOnPhrase" type="checkbox" checked />
+        <span>Reproducir frase rápida al tocarla</span>
+      </label>
+
+      <button id="testVoice" class="ghost full">Probar voz</button>
+    </div>
+  </div>
+
+  <!-- Panel de edición de frases -->
+  <div id="phrasesPanel" class="panel" hidden>
+    <div class="panel-inner">
+      <div class="panel-head">
+        <h2>Editar frases rápidas</h2>
+        <button id="closePhrases" class="icon-btn" aria-label="Cerrar">✕</button>
+      </div>
+      <p class="hint">Una frase por línea. Se guardan en este dispositivo.</p>
+      <textarea id="phrasesEditor" rows="10"></textarea>
+      <div class="panel-actions">
+        <button id="resetPhrases" class="ghost">Restaurar por defecto</button>
+        <button id="savePhrases" class="primary">Guardar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>

@@ -1,0 +1,20 @@
+{
+  "name": "SpeakText — Reposo vocal",
+  "short_name": "SpeakText",
+  "description": "Text to speech rápido y natural para cuando haces reposo vocal.",
+  "start_url": "./index.html",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "portrait",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}

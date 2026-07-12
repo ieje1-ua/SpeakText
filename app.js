@@ -74,6 +74,8 @@
     load(KEYS.settings, {})
   );
   let phrases = load(KEYS.phrases, DEFAULT_PHRASES);
+  // Si por lo que sea se guardó una lista vacía, recuperamos las de por defecto.
+  if (!Array.isArray(phrases) || phrases.length === 0) phrases = DEFAULT_PHRASES.slice();
   let history = load(KEYS.history, []);
 
   // --- Detección de inglés (para Spanglish) ---
@@ -423,10 +425,12 @@
     if (e.target === phrasesPanel) closePanel(phrasesPanel);
   });
   savePhrases.addEventListener("click", () => {
-    phrases = phrasesEditor.value
+    const next = phrasesEditor.value
       .split("\n")
       .map((s) => s.trim())
       .filter(Boolean);
+    // Nunca dejamos la lista vacía: si borras todo, se vuelve a las de por defecto.
+    phrases = next.length ? next : DEFAULT_PHRASES.slice();
     save(KEYS.phrases, phrases);
     renderPhrases();
     closePanel(phrasesPanel);

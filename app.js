@@ -70,9 +70,16 @@
   };
 
   const settings = Object.assign(
-    { voiceURI: "", rate: 1, pitch: 1, volume: 1, speakOnPhrase: true, spanglish: true },
+    { voiceURI: "", rate: 1, pitch: 0.7, volume: 1, speakOnPhrase: true, spanglish: true, settingsVersion: 2 },
     load(KEYS.settings, {})
   );
+  // Migración: aplica el tono grave por defecto a quienes ya tenían ajustes,
+  // respetando el valor si lo habían cambiado a algo distinto de 1.
+  if (settings.settingsVersion !== 2) {
+    if (settings.pitch === 1 || settings.pitch == null) settings.pitch = 0.7;
+    settings.settingsVersion = 2;
+    save(KEYS.settings, settings);
+  }
   let phrases = load(KEYS.phrases, DEFAULT_PHRASES);
   // Si por lo que sea se guardó una lista vacía, recuperamos las de por defecto.
   if (!Array.isArray(phrases) || phrases.length === 0) phrases = DEFAULT_PHRASES.slice();
@@ -233,6 +240,11 @@
   }
 
   // --- Hablar ---
+  // Reparte los tramos en español/inglés (o uno solo si no hay Spanglish).
+  function makeSegments(text) {
+    return settings.spanglish ? segmentByLang(text) : [{ text, lang: "es" }];
+  }
+
   function speak(text, chip) {
     text = (text || "").trim();
     if (!text) return;
@@ -240,16 +252,9 @@
       alert("Tu navegador no soporta síntesis de voz.");
       return;
     }
-
     synth.cancel(); // corta lo anterior para respuesta rápida
 
-    // Con Spanglish activado y voz inglesa disponible, separamos por idioma;
-    // si no, un único tramo en español.
-    const useSpanglish = settings.spanglish && enVoice;
-    const segments = useSpanglish
-      ? segmentByLang(text)
-      : [{ text, lang: "es" }];
-
+    const segments = makeSegments(text);
     stopBtn.disabled = false;
     if (chip) chip.classList.add("speaking");
     const finish = () => {
@@ -267,7 +272,7 @@
         u.lang = seg.lang === "en" ? "en-US" : "es-ES";
       }
       u.rate = settings.rate;
-      u.pitch = settings.pitch;
+      u.pitch = settings.pitch;   // tono grave por defecto => suena más masculina
       u.volume = settings.volume;
       if (i === segments.length - 1) {
         u.onend = finish;

@@ -1,4 +1,4 @@
-const CACHE = "speaktext-v5";
+const CACHE = "speaktext-v7";
 const ASSETS = [
   "./",
   "./index.html",
@@ -25,6 +25,8 @@ self.addEventListener("activate", (event) => {
 // Red primero (siempre lo último si hay conexión); si falla, cae a la caché.
 self.addEventListener("fetch", (event) => {
   if (event.request.method !== "GET") return;
+  // Deja pasar peticiones externas (p. ej. el audio de la voz en la nube).
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {
